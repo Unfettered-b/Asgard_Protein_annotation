@@ -1,0 +1,4 @@
+rule hello:
+    output: 'output.txt'
+    shell:
+        'echo hello world > {output}'
