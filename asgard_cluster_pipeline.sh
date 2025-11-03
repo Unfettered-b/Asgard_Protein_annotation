@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set +e -uo pipefail
 
 # ================================
 # Asgard Clustering Pipeline (Debug Mode)
@@ -13,9 +13,9 @@ set -euo pipefail
 # ================================
 
 # --- Input Arguments ---
-query_faa="$1"
-asgard_db="$2"
-outdir="$3"
+query_faa="${1:-/home/anirudh/genomes/selected_genomes/combined_proteins.faa}"
+asgard_db="${2:-/home/anirudh/genomes/asCOGs/asgard_db}"
+outdir="${3:-/home/anirudh/genomes/asCOGs/results}"
 
 echo "========================================"
 echo "[DEBUG] Starting Asgard Clustering Pipeline"
@@ -26,7 +26,11 @@ echo "========================================"
 
 # --- Directory Setup ---
 mkdir -p "$outdir/tmp"
-# echo "[DEBUG] Created output directory structure under: $outdir/tmp"
+mkdir -p "$outdir/assigned"
+mkdir -p "$outdir/unassigned"
+mkdir -p "$outdir/searches"
+mkdir -p "$outdir/denovo"
+echo "[DEBUG] Created output directory structure under: $outdir"
 
 # # --- Step 1: Create MMseqs2 DB for query ---
 # echo "[DEBUG] Checking if input FASTA exists..."
@@ -35,79 +39,126 @@ mkdir -p "$outdir/tmp"
 #   exit 1
 # fi
 
-# echo "[DEBUG] Running: mmseqs createdb \"$query_faa\" \"$outdir/query_db\""
-# mmseqs createdb "$query_faa" "$outdir/query_db"
-# echo "[DEBUG] Query DB created at: $outdir/query_db"
+# echo "[DEBUG] Running: mmseqs createdb \"$query_faa\" \"$outdir/searches/query_db\""
+# mmseqs createdb "$query_faa" "$outdir/searches/query_db"
+# echo "[DEBUG] Query DB created at: $outdir/searches/query_db"
 
 # # --- Step 2: Assign query proteins to reference Asgard clusters ---
 # echo "[1] Assigning query proteins to Asgard reference clusters..."
-# echo "[DEBUG] Command: mmseqs search \"$outdir/query_db\" \"$asgard_db\" \"$outdir/ref_search\" \"$outdir/tmp\" -e 0.001 -s 9 --cov-mode 0 -c 0.8"
-# mmseqs search "$outdir/query_db" "$asgard_db" "$outdir/ref_search" "$outdir/tmp" -e 0.001 -s 9 --cov-mode 0 -c 0.8
-# mmseqs convertalis "$outdir/query_db" "$asgard_db" "$outdir/ref_search" "$outdir/ref_search.tsv"
-# echo "[DEBUG] Reference search results saved to: $outdir/ref_search.tsv"
-# --- Step 3: Identify unassigned proteins ---
-echo "[2] Extracting unassigned proteins..."
+# echo "[DEBUG] Command: mmseqs search \"$outdir/searches/query_db\" \"$asgard_db\" \"$outdir/searches/ref_search\" \"$outdir/tmp\" -e 0.001 -s 9 --cov-mode 0 -c 0.8"
+# mmseqs search "$outdir/searches/query_db" "$asgard_db" "$outdir/searches/ref_search" "$outdir/tmp" -e 0.001 -s 9 --cov-mode 0 -c 0.8
 
-# 1. Extract IDs of sequences that have hits
-mmseqs convertalis "$outdir/query_db" "$asgard_db" "$outdir/ref_search" "$outdir/assigned.tsv" --format-output query,target
+# # --- Step 3: Identify unassigned proteins using seqkit ---
+# echo "[2] Extracting unassigned proteins..."
 
-# 2. Get unique query IDs (sequences that had hits)
-cut -f1 "$outdir/assigned.tsv" | sort -u > "$outdir/assigned_ids.txt"
+# Extract assigned IDs (first column only - query IDs)
+mmseqs convertalis "$outdir/searches/query_db" "$asgard_db" "$outdir/searches/ref_search" "$outdir/assigned/assigned.tsv" --format-output query
+cut -f1 "$outdir/assigned/assigned.tsv" | sort -u > "$outdir/assigned/assigned_ids.txt"
 
-# 3. Extract all query sequence IDs
-mmseqs convert2fasta "$outdir/query_db" "$outdir/all_query_tmp.faa"
-grep "^>" "$outdir/all_query_tmp.faa" | sed 's/^>//' > "$outdir/all_query_ids.txt"
-rm "$outdir/all_query_tmp.faa"
+echo "[DEBUG] Assigned proteins: $(wc -l < "$outdir/assigned/assigned_ids.txt")"
 
-# 4. Get IDs that were not assigned
-grep -Fxv -f "$outdir/assigned_ids.txt" "$outdir/all_query_ids.txt" > "$outdir/unassigned_ids.txt"
+# Use seqkit to extract unassigned sequences directly from original FASTA
+echo "[DEBUG] Extracting unassigned sequences using seqkit..."
+seqkit grep -v -f "$outdir/assigned/assigned_ids.txt" \
+    "$query_faa" \
+    > "$outdir/unassigned/unassigned.faa"
 
-# 5. Create a sub-DB with unassigned sequences
-mmseqs createsubdb "$outdir/unassigned_ids.txt" "$outdir/query_db" "$outdir/unassigned_proteins_db"
+echo "[DEBUG] Unassigned proteins: $(grep -c '^>' "$outdir/unassigned/unassigned.faa")"
 
-# 6. Convert to FASTA
-mmseqs convert2fasta "$outdir/unassigned_proteins_db" "$outdir/unassigned.faa"
-
-echo "[DEBUG] Unassigned proteins saved to: $outdir/unassigned.faa"
+# Verify headers are unique
+echo "[DEBUG] Verifying unique headers..."
+unique_headers=$(grep '^>' "$outdir/unassigned/unassigned.faa" | sort -u | wc -l)
+total_headers=$(grep -c '^>' "$outdir/unassigned/unassigned.faa")
+if [[ "$unique_headers" -ne "$total_headers" ]]; then
+    echo "[WARNING] Duplicate headers found! Creating unique headers..."
+    awk 'BEGIN{counter=1} /^>/ {print ">unassigned_seq_" counter++; next} {print}' \
+        "$outdir/unassigned/unassigned.faa" > "$outdir/unassigned/unassigned_fixed.faa"
+    mv "$outdir/unassigned/unassigned_fixed.faa" "$outdir/unassigned/unassigned.faa"
+    echo "[DEBUG] Fixed headers - now unique: $(grep -c '^>' "$outdir/unassigned/unassigned.faa")"
+fi
 
 # --- Step 4: Filter unassigned proteins (≥60 aa) ---
 echo "[3] Filtering unassigned proteins (≥60 aa)..."
-awk '/^>/ {if(seq) print seq; print; seq=""} /^[^>]/ {seq=seq$0} END{if(seq) print seq}' "$outdir/unassigned.faa" \
-| awk 'BEGIN{RS=">"; FS="\n"} length($2) >= 60 {print ">"$0}' > "$outdir/unassigned_60aa.faa"
+seqkit seq -m 60 --remove-gaps "$outdir/unassigned/unassigned.faa" > "$outdir/unassigned/unassigned_60aa.faa"
 
-echo "[DEBUG] Filtered unassigned sequences saved to: $outdir/unassigned_60aa.faa"
-echo "[DEBUG] File size check:"
-ls -lh "$outdir/unassigned_60aa.faa"
+echo "[DEBUG] Filtered unassigned sequences: $(grep -c '^>' "$outdir/unassigned/unassigned_60aa.faa")"
+echo "[DEBUG] Sample of filtered headers:"
+# grep "^>" "$outdir/unassigned/unassigned_60aa.faa" | head -5
 
 # --- Step 5: Cluster unassigned proteins de novo ---
 echo "[4] Clustering unassigned proteins de novo..."
-mmseqs createdb "$outdir/unassigned_60aa.faa" "$outdir/unassigned_60aa_db"
-mmseqs cluster "$outdir/unassigned_60aa_db" "$outdir/denovo_clu" "$outdir/tmp" --min-seq-id 0.2 -c 0.5
-mmseqs createtsv "$outdir/unassigned_60aa_db" "$outdir/unassigned_60aa_db" "$outdir/denovo_clu" "$outdir/denovo_clu.tsv"
-echo "[DEBUG] De novo clustering complete."
-
-# --- Step 6: Build sequence profiles ---
-echo "[5] Building sequence profiles..."
-mmseqs createseqfiledb "$outdir/unassigned_60aa_db" "$outdir/denovo_clu" "$outdir/denovo_clu_seq"
-mmseqs result2profile "$outdir/unassigned_60aa_db" "$outdir/unassigned_60aa_db" "$outdir/denovo_clu" "$outdir/denovo_profiles"
-echo "[DEBUG] Sequence profiles generated."
-
-# --- Step 7: Get representative sequences ---
-echo "[6] Selecting representative sequences..."
-mmseqs search "$outdir/unassigned_60aa_db" "$outdir/denovo_profiles" "$outdir/cluster_vs_profile" "$outdir/tmp"
-mmseqs convertalis "$outdir/unassigned_60aa_db" "$outdir/denovo_profiles" "$outdir/cluster_vs_profile" "$outdir/cluster_vs_profile.tsv"
-echo "[DEBUG] Representative sequences identified."
-
-# --- Step 8: Merge representatives ---
-echo "[7] Merging all representative sequences..."
-rep_pattern="${asgard_db}_rep.*.faa"
-echo "[DEBUG] Looking for Asgard representative files matching: $rep_pattern"
-if compgen -G "$rep_pattern" > /dev/null; then
-  cat $rep_pattern "$outdir/unassigned_60aa.faa" > "$outdir/all_cluster_representatives.faa"
-  echo "[DEBUG] Merged file created: $outdir/all_cluster_representatives.faa"
+if [[ ! -s "$outdir/unassigned/unassigned_60aa.faa" ]]; then
+    echo "[WARNING] No unassigned proteins to cluster. Creating empty files."
+    touch "$outdir/denovo/denovo_clu.tsv"
+    touch "$outdir/denovo/denovo_reps.faa"
 else
-  echo "[WARNING] No Asgard representative FASTA files found matching: $rep_pattern"
-  cp "$outdir/unassigned_60aa.faa" "$outdir/all_cluster_representatives.faa"
+    mmseqs createdb "$outdir/unassigned/unassigned_60aa.faa" "$outdir/unassigned/unassigned_60aa_db"
+    
+    # Cluster with reasonable parameters
+    echo "[DEBUG] Running de novo clustering..."
+    mmseqs cluster "$outdir/unassigned/unassigned_60aa_db" \
+        "$outdir/denovo/denovo_clu" \
+        "$outdir/tmp" \
+        --min-seq-id 0.3 \
+        -c 0.7 \
+        --cov-mode 1
+    
+    mmseqs createtsv "$outdir/unassigned/unassigned_60aa_db" \
+        "$outdir/unassigned/unassigned_60aa_db" \
+        "$outdir/denovo/denovo_clu" \
+        "$outdir/denovo/denovo_clu.tsv"
+
+    mmseqs result2repseq "$outdir/unassigned/unassigned_60aa_db" \
+        "$outdir/denovo/denovo_clu" \
+        "$outdir/denovo/denovo_reps"
+
+    mmseqs convert2fasta "$outdir/denovo/denovo_reps" \
+        "$outdir/denovo/denovo_reps.faa"
+
+    echo "[DEBUG] De novo clustering complete."
+    num_denovo_clusters=$(grep -c '^>' "$outdir/denovo/denovo_reps.faa" 2>/dev/null || echo 0)
+    num_input_seqs=$(grep -c '^>' "$outdir/unassigned/unassigned_60aa.faa")
+    num_clustered_seqs=$(wc -l < "$outdir/denovo/denovo_clu.tsv" 2>/dev/null || echo 0)
+    
+    echo "[DEBUG] Input sequences: $num_input_seqs"
+    echo "[DEBUG] Number of de novo clusters: $num_denovo_clusters"
+    echo "[DEBUG] Sequences assigned to clusters: $num_clustered_seqs"
+    
+    # Check cluster distribution
+    if [[ -f "$outdir/denovo/denovo_clu.tsv" ]]; then
+        echo "[DEBUG] Cluster size distribution:"
+        cut -f2 "$outdir/denovo/denovo_clu.tsv" | sort | uniq -c | sort -nr | head -5
+    fi
 fi
 
+# --- Step 6: Merge representatives ---
+echo "[5] Merging all representative sequences..."
+# Look for Asgard representatives in the same directory as the database
+asgard_dir=$(dirname "$asgard_db")
+asgard_base=$(basename "$asgard_db")
+rep_files=$(find "$asgard_dir" -name "${asgard_base}_rep*.faa" -o -name "${asgard_base}.rep*.faa" | head -1)
+
+if [[ -n "$rep_files" && -s "$rep_files" ]]; then
+  cat $rep_files > "$outdir/assigned/all_cluster_representatives.faa"
+  echo "[DEBUG] Added Asgard representatives: $(grep -c '^>' $rep_files)"
+else
+  > "$outdir/assigned/all_cluster_representatives.faa"
+  echo "[WARNING] No Asgard representative FASTA files found"
+fi
+
+# Add de novo representatives if they exist
+if [[ -s "$outdir/denovo/denovo_reps.faa" ]]; then
+  cat "$outdir/denovo/denovo_reps.faa" >> "$outdir/assigned/all_cluster_representatives.faa"
+  echo "[DEBUG] Added de novo representatives: $(grep -c '^>' "$outdir/denovo/denovo_reps.faa")"
+fi
+
+echo "[DEBUG] Total representatives: $(grep -c '^>' "$outdir/assigned/all_cluster_representatives.faa" 2>/dev/null || echo 0)"
+
+# Cleanup
+rm -rf "$outdir/tmp"
+
 echo "✅ Done! All results saved in: $outdir"
+
+# The Python script runs automatically, no need to call it here
+echo "[INFO] Pipeline completed. Genearting Summary."
+python3 "/home/anirudh/genomes/scripts/mmseqs_clustering_summary.py" $outdir
