@@ -83,7 +83,7 @@ seqkit seq -m 60 --remove-gaps "$outdir/unassigned/unassigned.faa" > "$outdir/un
 
 echo "[DEBUG] Filtered unassigned sequences: $(grep -c '^>' "$outdir/unassigned/unassigned_60aa.faa")"
 echo "[DEBUG] Sample of filtered headers:"
-# grep "^>" "$outdir/unassigned/unassigned_60aa.faa" | head -5
+grep "^>" "$outdir/unassigned/unassigned_60aa.faa" | head -5
 
 # --- Step 5: Cluster unassigned proteins de novo ---
 echo "[4] Clustering unassigned proteins de novo..."
@@ -99,8 +99,8 @@ else
     mmseqs cluster "$outdir/unassigned/unassigned_60aa_db" \
         "$outdir/denovo/denovo_clu" \
         "$outdir/tmp" \
-        --min-seq-id 0.3 \
-        -c 0.7 \
+        --min-seq-id 0.2 \
+        -c 0.5 \
         --cov-mode 1
     
     mmseqs createtsv "$outdir/unassigned/unassigned_60aa_db" \

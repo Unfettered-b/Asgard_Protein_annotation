@@ -1,6 +1,8 @@
 #!/bin/bash
 
-# --- Configuration ---
+# Script to create the query_db for clustering of the proteins using mmseqs2
+
+# --- Configuration ---w
 input_dir="/home/anirudh/genomes/selected_genomes/prokka_results"
 output_csv="/home/anirudh/genomes/selected_genomes/all_faa_ids.csv"
 output_fasta="/home/anirudh/genomes/selected_genomes/combined_proteins.faa"

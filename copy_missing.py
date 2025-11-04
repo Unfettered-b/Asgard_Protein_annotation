@@ -16,7 +16,7 @@ with open(missing_file, 'r') as file:
 print(len(missing_list))
 
 source_dir = "/home/anirudh/genomes/selected_genomes/prokka_results"
-destination_dir = "/home/anirudh/genomes/missing_faa"
+destination_dir = "/home/anirudh/genomes/missing_faa/miss2"
 
 # Create destination dir if it doesn't exist
 os.makedirs(destination_dir, exist_ok=True)

@@ -12,7 +12,7 @@ mode="$1"  # 1 = Docker mode, else Conda mode
 BASE="/home/anirudh"
 DATA_DIR="$BASE/genomes/eggnog"              # Local path to EggNOG DB
 #INPUT_DIR="$BASE/genomes/selected_genomes/prokka_results" # when running fresh
-INPUT_DIR="$BASE/genomes/missing_faa" # when running incomplete runs
+INPUT_DIR="$BASE/genomes/missing_faa/miss2" # when running incomplete runs
 OUTPUT_DIR_WSL="$BASE/emapper_results"       # WSL-native output
 FINAL_OUTPUT_DIR="$BASE/genomes/selected_genomes/emapper_results"
 CPU=8                                         # CPUs per job
