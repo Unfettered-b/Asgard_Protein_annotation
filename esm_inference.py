@@ -1,3 +1,5 @@
+# faced dependency issues in local runtime thus shifted to colab. This script is discontinued
+
 
 from Bio import SeqIO
 import torch
