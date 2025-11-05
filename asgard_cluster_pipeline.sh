@@ -32,26 +32,26 @@ mkdir -p "$outdir/searches"
 mkdir -p "$outdir/denovo"
 echo "[DEBUG] Created output directory structure under: $outdir"
 
-# # --- Step 1: Create MMseqs2 DB for query ---
-# echo "[DEBUG] Checking if input FASTA exists..."
-# if [[ ! -f "$query_faa" ]]; then
-#   echo "[ERROR] Input FASTA file not found: $query_faa"
-#   exit 1
-# fi
+# --- Step 1: Create MMseqs2 DB for query ---
+echo "[DEBUG] Checking if input FASTA exists..."
+if [[ ! -f "$query_faa" ]]; then
+  echo "[ERROR] Input FASTA file not found: $query_faa"
+  exit 1
+fi
 
-# echo "[DEBUG] Running: mmseqs createdb \"$query_faa\" \"$outdir/searches/query_db\""
-# mmseqs createdb "$query_faa" "$outdir/searches/query_db"
-# echo "[DEBUG] Query DB created at: $outdir/searches/query_db"
+echo "[DEBUG] Running: mmseqs createdb \"$query_faa\" \"$outdir/searches/query_db\""
+mmseqs createdb "$query_faa" "$outdir/searches/query_db"
+echo "[DEBUG] Query DB created at: $outdir/searches/query_db"
 
-# # --- Step 2: Assign query proteins to reference Asgard clusters ---
-# echo "[1] Assigning query proteins to Asgard reference clusters..."
-# echo "[DEBUG] Command: mmseqs search \"$outdir/searches/query_db\" \"$asgard_db\" \"$outdir/searches/ref_search\" \"$outdir/tmp\" -e 0.001 -s 9 --cov-mode 0 -c 0.8"
-# mmseqs search "$outdir/searches/query_db" "$asgard_db" "$outdir/searches/ref_search" "$outdir/tmp" -e 0.001 -s 9 --cov-mode 0 -c 0.8
+# --- Step 2: Assign query proteins to reference Asgard clusters ---
+echo "[1] Assigning query proteins to Asgard reference clusters..."
+echo "[DEBUG] Command: mmseqs search \"$outdir/searches/query_db\" \"$asgard_db\" \"$outdir/searches/ref_search\" \"$outdir/tmp\" -e 0.001 -s 9 --cov-mode 0 -c 0.8"
+mmseqs search "$outdir/searches/query_db" "$asgard_db" "$outdir/searches/ref_search" "$outdir/tmp" -e 0.001 -s 9 --cov-mode 0 -c 0.8
 
-# # --- Step 3: Identify unassigned proteins using seqkit ---
-# echo "[2] Extracting unassigned proteins..."
+# --- Step 3: Identify unassigned proteins using seqkit ---
+echo "[2] Extracting unassigned proteins..."
 
-# Extract assigned IDs (first column only - query IDs)
+Extract assigned IDs (first column only - query IDs)
 mmseqs convertalis "$outdir/searches/query_db" "$asgard_db" "$outdir/searches/ref_search" "$outdir/assigned/assigned.tsv" --format-output query
 cut -f1 "$outdir/assigned/assigned.tsv" | sort -u > "$outdir/assigned/assigned_ids.txt"
 

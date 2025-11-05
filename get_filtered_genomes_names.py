@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 
 # --- Input paths ---
-level = 70
+level = 50
 tsv_path = "/home/anirudh/genomes/Asgard_genomes/ncbi_dataset/ncbi_dataset.tsv"
 csv_path = f"/home/anirudh/genomes/Asgard_genomes/Data/Filtered_genomes{level}.csv"
 output_path = f"/home/anirudh/genomes/Asgard_genomes/Data/Filtered_genomes{level}_names.csv"

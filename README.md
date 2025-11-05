@@ -36,6 +36,7 @@ The pipeline supports both **local Conda environments** and **Docker-based ESMFo
 | `esm_inference.py` | ESMFold structure prediction script (Python) |
 | `esmfold_runner.sh` | Docker wrapper for running ESMFold on FASTA inputs |
 | `missing_faas.txt` | List of missing protein files for debugging |
+| `compile_cds_info.py` | Compiles all the proteins of the given completeness level; filter_genomes.py |
 
 ---
 

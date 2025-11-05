@@ -92,7 +92,7 @@ def move_files(path_df, destination_path):
 
 def main(file):
     # Filter CheckM2 output
-    level = 60
+    level = 50
     filtered = filter_genomes(file, level)
 
     # Get .fna file paths
