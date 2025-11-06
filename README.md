@@ -37,6 +37,7 @@ The pipeline supports both **local Conda environments** and **Docker-based ESMFo
 | `esmfold_runner.sh` | Docker wrapper for running ESMFold on FASTA inputs |
 | `missing_faas.txt` | List of missing protein files for debugging |
 | `compile_cds_info.py` | Compiles all the proteins of the given completeness level; filter_genomes.py |
+| `search_cds.ipyng` | searches the cds file from "compile_cds_info.py" for specific cds" |
 
 ---
 
