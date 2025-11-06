@@ -1,6 +1,8 @@
 import pandas as pd
 import os
 from collections import defaultdict as ddict
+import sys
+import shutil
 
 # Takes input of the folder containing faa files having cds of all genomes filtered to a specific completion level 
 
@@ -70,13 +72,13 @@ def build_protein_table(faabasepath, metadata_csv):
 
         for cds, header, seq in zip(proteins['cds_ids'], proteins['header'], proteins['sequence']):
             records.append({
-                'cds_id': cds,
-                'header': header,
-                'sequence': seq,
-                'genome_file': filename,
                 'organism_name': org_name,
                 'breed': org_breed,
-                'strain': org_strain
+                'strain': org_strain,
+                'cds_id': cds,
+                'header': header,
+                'genome_file': filename,              
+                'sequence': seq,
             })
         
         print(f"found {len(records)} proteins")
@@ -88,15 +90,18 @@ def build_protein_table(faabasepath, metadata_csv):
 def main():
         
     # define the input dirs
-    completeness = 50
+    completeness = sys.argv[1]  if len(sys.argv)>1 else 50
     genome_cds_folder = f"/home/anirudh/genomes/complete{completeness}/"
     genome_cds_paths = f"{genome_cds_folder}/prokka/"
     genomes_data = "/home/anirudh/genomes/Asgard_genomes/ncbi_dataset/ncbi_dataset.tsv"
+    scripts_data = "/home/anirudh/genomes/scripts/data/"
 
     output = build_protein_table(genome_cds_paths, genomes_data)
 
     outfilename = os.path.join(genome_cds_folder, f"Proteins_genomes_cp{completeness}.csv")
+    scripts_file = os.path.join(scripts_data, f"Proteins_genomes_cp{completeness}.csv")
     output.to_csv(outfilename)
+    shutil.copy2(outfilename, scripts_file)
 
     print(f"Full Proteins file for completeness {completeness} has been saved to {outfilename}")
 
