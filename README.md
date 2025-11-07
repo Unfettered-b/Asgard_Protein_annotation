@@ -41,12 +41,6 @@ The pipeline supports both **local Conda environments** and **Docker-based ESMFo
 
 ---
 
-## Running in Colab
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Unfettered-b/Asgard_Protein_annotation/blob/main/search_cds.ipynb)
-
-
-
 ## ⚙️ Installation
 
 ### 1️⃣ Create environment

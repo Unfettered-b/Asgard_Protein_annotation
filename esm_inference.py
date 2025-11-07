@@ -3,12 +3,13 @@
 
 from Bio import SeqIO
 import torch
-import esm
 import biotite.structure.io as bsio
 import pandas as pd
 import os
 from tqdm import tqdm 
+import esm
 
+# Input fasta file containing protein sequences for structure prediction
 input_fasta = "/home/anirudh/genomes/asCOGs/results/selected/denovo_reps_large.faa"
 outfolder = "/home/anirudh/genomes/predicted/"
 pdbfolder = os.path.join(outfolder, "pdbs")
@@ -27,12 +28,17 @@ pdbase = pd.DataFrame({"IDs": ids,
 
 pdbcsvfile = os.path.join(outfolder, "prediction_summary.csv")
 
+print("Starting ESM pipeline...")
 
-model = torch.hub.load("facebookresearch/esm:main", "esmfold_v1")
 
-model = model.eval().cuda()
+# model = torch.hub.load("facebookresearch/esm:main", "esmfold_v1")
+model = esm.pretrained.esmfold_v1()
+
 
 print("Loaded ESMfold model")
+model = model.eval().cuda()
+
+
 
 for record in tqdm(SeqIO.parse(input_fasta, "fasta"), desc="Predicting Structures"):
     

@@ -1,6 +1,7 @@
 #!/bin/bash
 # ESMfold Docker Run Script
 # Usage: ./esmfold_runner.sh [simple|custom]
+# Not used since using ipynb
 
 set -e
 
