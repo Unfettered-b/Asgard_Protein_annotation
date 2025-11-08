@@ -1,6 +1,3 @@
-# faced dependency issues in local runtime thus shifted to colab. This script is discontinued
-
-
 from Bio import SeqIO
 import torch
 import biotite.structure.io as bsio
@@ -8,91 +5,128 @@ import pandas as pd
 import os
 from tqdm import tqdm 
 import esm
+from datetime import datetime
 
-# Input fasta file containing protein sequences for structure prediction
+# =====================
+# Logging setup
+# =====================
+LOG_DIR = "/home/anirudh/genomes/predicted/logs/"
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "esm_inference.log")
+
+def log(message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{timestamp}] {message}"
+    with open(LOG_FILE, "a") as f:
+        f.write(line + "\n")
+    print(line)
+
+# =====================
+# Input / Output paths
+# =====================
 input_fasta = "/home/anirudh/genomes/asCOGs/results/selected/denovo_reps_large.faa"
 outfolder = "/home/anirudh/genomes/predicted/"
 pdbfolder = os.path.join(outfolder, "pdbs")
 os.makedirs(outfolder, exist_ok=True)
 os.makedirs(pdbfolder, exist_ok=True)
-
-pdbs = [] # empty list for storing the names of the pdb structures
-score = [] # empty list for storing pLDDT values of the predicted structure of proteins
-ids = []
-seqs = []
-
-pdbase = pd.DataFrame({"IDs": ids,
-                        "seqs": seqs,
-                        "pdb model" :pdbs,
-                        "confidence": score })
-
 pdbcsvfile = os.path.join(outfolder, "prediction_summary.csv")
 
-print("Starting ESM pipeline...")
+# =====================
+# Load previous predictions if they exist
+# =====================
+ids, seqs, pdbs, score = [], [], [], []
 
+pdbase = pd.DataFrame({"IDs": ids, "seqs": seqs, "pdb model": pdbs, "confidence": score})
+if os.path.exists(pdbcsvfile):
+    log(f"Loading existing prediction summary from {pdbcsvfile}")
+    pdbase = pd.read_csv(pdbcsvfile)
+    ids = pdbase["IDs"].tolist()
+    seqs = pdbase["seqs"].tolist()
+    pdbs = pdbase["pdb model"].tolist()
+    score = pdbase["confidence"].tolist()
+    log(f"Loaded {len(ids)} existing predictions")
 
-# model = torch.hub.load("facebookresearch/esm:main", "esmfold_v1")
+# =====================
+# Counters
+# =====================
+processed_count = 0
+skipped_long_count = 0
+failed_count = 0
+
+# =====================
+# Load ESMFold model
+# =====================
+log("Loading ESMFold model...")
 model = esm.pretrained.esmfold_v1()
-
-
-print("Loaded ESMfold model")
 model = model.eval().cuda()
+log("ESMFold model loaded.")
 
+# =====================
+# Structure prediction loop
+# =====================
+for i, record in enumerate(tqdm(SeqIO.parse(input_fasta, "fasta"), desc="Predicting Structures")):
+    if record.id in ids:
+        log(f"Skipping {record.id}, already predicted.")
+        continue
 
-
-for record in tqdm(SeqIO.parse(input_fasta, "fasta"), desc="Predicting Structures"):
-    
-
-    print(f"Predicting structure for {record.id}")
-    ids.append(record.id)
+    processed_count += 1
     seq = str(record.seq)
+    ids.append(record.id)
     seqs.append(seq)
 
-    # ESMfold struggles structure prediction for long proteins (>1024 aa); prediction of long proteins will be done through colabfold
-    if len(seq) > 1024:
-        print(f"Skipping {record.id} (sequence too long: {len(seq)} aa)")
+    if len(seq) > 1000:
+        log(f"Skipping {record.id} (sequence too long: {len(seq)} aa)")
+        skipped_long_count += 1
         pdbs.append(None)
         score.append(None)
-        continue
-    
-    try: 
-        with torch.no_grad():
-            pdb = model.infer_pdb(seq)
-
-        # structure prediction and storage
-        pdb_path = os.path.join(pdbfolder, f"{record.id}.pdb")
-        with open(pdb_path, "w") as f:
-            f.write(pdb)
-        print(f"{record.id}.pdb written and saved at {pdb_path}")
-        pdbs.append(pdb_path)
-
-        # this will be the pLDDT
+    else:
         try:
-            struct = bsio.load_structure(os.path.join(pdbfolder, f"{record.id}.pdb"), extra_fields=["b_factor"])
-            score.append(struct.b_factor.mean())
+            with torch.no_grad():
+                pdb = model.infer_pdb(seq)
+
+            pdb_path = os.path.join(pdbfolder, f"{record.id}.pdb")
+            with open(pdb_path, "w") as f:
+                f.write(pdb)
+            log(f"{record.id}.pdb written and saved at {pdb_path}")
+            pdbs.append(pdb_path)
+
+            try:
+                struct = bsio.load_structure(pdb_path, extra_fields=["b_factor"])
+                score.append(struct.b_factor.mean())
+            except Exception as e:
+                log(f"Warning: failed to load structure for {record.id}: {e}")
+                score.append(None)
+
+            log(f"pLDDT for {record.id}: {score[-1]}") 
+            torch.cuda.empty_cache()
+
         except Exception as e:
-            print(f"Warning: failed to load structure for {record.id}: {e}")
+            failed_count += 1
+            log(f"Failed for {record.id}: {e}")
+            pdbs.append(None)
             score.append(None)
 
-        print("pLDDT for the structure: ", score[-1]) 
+    # Save intermediate results and append summary every 10 predictions
+    if len(ids) % 10 == 0:
+        pdbase = pd.DataFrame({"IDs": ids, "seqs": seqs, "pdb model": pdbs, "confidence": score})
+        pdbase.to_csv(pdbcsvfile, index=False)
 
-        # removing cuda cache to prevent cache build up
-        torch.cuda.empty_cache()
+        summary = (
+            f"=== ESMFold Summary after {len(ids)} runs ===\n"
+            f"Total IDs processed: {processed_count}\n"
+            f"Skipped due to long sequences: {skipped_long_count}\n"
+            f"Failed runs: {failed_count}\n"
+            f"Successful predictions: {processed_count - skipped_long_count - failed_count}\n"
+            f"============================================"
+        )
+        log(summary)
 
-        if len(ids) % 10 == 0:
-            pdbase = pd.DataFrame({"IDs": ids, "seqs": seqs, "pdb model": pdbs, "confidence": score})
-            pdbase.to_csv(pdbcsvfile, index=False)
+# =====================
+# Final save
+# =====================
+pdbase = pd.DataFrame({"IDs": ids, "seqs": seqs, "pdb model": pdbs, "confidence": score})
+pdbase.to_csv(pdbcsvfile, index=False)
+torch.cuda.empty_cache()
 
-    
-    except Exception as e:
-        print(f"Failed for {record.id}: {e}")
-        pdbs.append(None)
-        score.append(None)
-
-
-
-pdbase.to_csv(pdbcsvfile)
-
-print(f"Prediction summary saved to {pdbcsvfile}")
-
-
+log(f"Prediction summary saved to {pdbcsvfile}")
+log("ESMFold pipeline completed.")
