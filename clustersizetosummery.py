@@ -7,7 +7,7 @@ clustersdir = os.path.join(inputdir, "selected")
 
 
 
-countdb = pd.read_csv(os.path.join(clustersdir, "cluster_sizes.txt"), sep="\t", header=None, names=[ "size", "cluster"])
+countdb = pd.read_csv(os.path.join(clustersdir, "cluster_sizes.txt"), sep=" ", header=None, names=[ "size", "cluster"])
 summary_file = os.path.join(inputdir, "asgard_clustering_summary.tsv")
 
 countdb['size'] = pd.to_numeric(countdb['size'], errors='coerce')
