@@ -6,6 +6,13 @@ import os
 from tqdm import tqdm 
 import esm
 from datetime import datetime
+import signal 
+
+
+# define timeout for structure prediction (in seconds)
+TIMEOUT = 420  # 7 minutes
+
+
 
 # =====================
 # Logging setup
@@ -17,9 +24,24 @@ LOG_FILE = os.path.join(LOG_DIR, "esm_inference.log")
 def log(message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{timestamp}] {message}"
+    # Write to log file
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
-    print(line)
+    # Print above tqdm bar
+    tqdm.write(line)
+
+
+
+# =====================
+# Setting up model run and timeout
+# =====================
+
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Took too long!")
+
+signal.signal(signal.SIGALRM, timeout_handler)
+
 
 # =====================
 # Input / Output paths
@@ -82,7 +104,10 @@ for i, record in enumerate(tqdm(SeqIO.parse(input_fasta, "fasta"), desc="Predict
     else:
         try:
             with torch.no_grad():
-                pdb = model.infer_pdb(seq)
+                signal.alarm(TIMEOUT)  # Start timeout countdown
+                pdb = model.infer_pdb(seq)  # Warm-up run
+                
+                
 
             pdb_path = os.path.join(pdbfolder, f"{record.id}.pdb")
             with open(pdb_path, "w") as f:
@@ -100,11 +125,22 @@ for i, record in enumerate(tqdm(SeqIO.parse(input_fasta, "fasta"), desc="Predict
             log(f"pLDDT for {record.id}: {score[-1]}") 
             torch.cuda.empty_cache()
 
+        except TimeoutError:
+            failed_count += 1
+            log(f"Timeout: Prediction for {record.id} exceeded {TIMEOUT} seconds.")
+            pdbs.append(None)
+            score.append(None)
+
         except Exception as e:
             failed_count += 1
             log(f"Failed for {record.id}: {e}")
             pdbs.append(None)
             score.append(None)
+        
+        finally:
+            signal.alarm(0)  # Disable timeout
+        
+
 
     # Save intermediate results and append summary every 10 predictions
     if len(ids) % 10 == 0:
