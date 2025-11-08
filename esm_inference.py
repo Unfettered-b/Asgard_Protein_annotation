@@ -130,12 +130,16 @@ for i, record in enumerate(tqdm(SeqIO.parse(input_fasta, "fasta"), desc="Predict
             log(f"Timeout: Prediction for {record.id} exceeded {TIMEOUT} seconds.")
             pdbs.append(None)
             score.append(None)
+            del pdb
+            torch.cuda.empty_cache()
 
         except Exception as e:
             failed_count += 1
             log(f"Failed for {record.id}: {e}")
             pdbs.append(None)
             score.append(None)
+            del pdb
+            torch.cuda.empty_cache()
         
         finally:
             signal.alarm(0)  # Disable timeout
@@ -149,10 +153,11 @@ for i, record in enumerate(tqdm(SeqIO.parse(input_fasta, "fasta"), desc="Predict
 
         summary = (
             f"=== ESMFold Summary after {len(ids)} runs ===\n"
-            f"Total IDs processed: {processed_count}\n"
-            f"Skipped due to long sequences: {skipped_long_count}\n"
-            f"Failed runs: {failed_count}\n"
+            f"Total IDs processed: {processed_count}, {len(ids)}\n"
+            f"Skipped due to long sequences in this session: {skipped_long_count}\n"
+            f"Failed runs in this session: {failed_count}\n"
             f"Successful predictions: {processed_count - skipped_long_count - failed_count}\n"
+            f"Valid structures: {(lambda lst: sum(1 for x in lst if x > 80))(score)}\n"
             f"============================================"
         )
         log(summary)
