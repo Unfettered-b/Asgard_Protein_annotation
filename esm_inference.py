@@ -130,7 +130,7 @@ for i, record in enumerate(tqdm(SeqIO.parse(input_fasta, "fasta"), desc="Predict
             log(f"Timeout: Prediction for {record.id} exceeded {TIMEOUT} seconds.")
             pdbs.append(None)
             score.append(None)
-            del pdb
+
             torch.cuda.empty_cache()
 
         except Exception as e:
@@ -138,7 +138,7 @@ for i, record in enumerate(tqdm(SeqIO.parse(input_fasta, "fasta"), desc="Predict
             log(f"Failed for {record.id}: {e}")
             pdbs.append(None)
             score.append(None)
-            del pdb
+
             torch.cuda.empty_cache()
         
         finally:
@@ -157,7 +157,8 @@ for i, record in enumerate(tqdm(SeqIO.parse(input_fasta, "fasta"), desc="Predict
             f"Skipped due to long sequences in this session: {skipped_long_count}\n"
             f"Failed runs in this session: {failed_count}\n"
             f"Successful predictions: {processed_count - skipped_long_count - failed_count}\n"
-            f"Valid structures: {(lambda lst: sum(1 for x in lst if x > 80))(score)}\n"
+            f"Valid structures (pLDDT > 80): {(lambda lst: sum(1 for x in lst if x is not None and x > 80))(score)}\n"
+
             f"============================================"
         )
         log(summary)

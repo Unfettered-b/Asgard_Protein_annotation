@@ -15,7 +15,7 @@ set -e
 
 # --- Input and Output Directories ---
 input_dir=${1:-"./"}
-output_dir=${2:-"/mnt/d/genomes/selected_genomes/prokka_results"}
+output_dir=${2:-"/home/anirudh/genomes/selected_genomes/prokka_results"}
 
 # --- Create output directory if not exists ---
 mkdir -p "$output_dir"
